@@ -1,0 +1,6 @@
+{
+  "appId": "com.nick.dartslookup",
+  "appName": "Darts Lookup",
+  "webDir": "www",
+  "plugins": { "CapacitorHttp": { "enabled": true } }
+}

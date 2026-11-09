@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Darts Lookup</title>
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--tx:#202830;--mu:#5b6772;--ac:#183957;--bd:#d5dde6;--hd:#e4edf7;--ok:#1a7f4b;--wn:#963400}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1720;--card:#18222d;--tx:#e6edf3;--mu:#93a1ae;--ac:#7fb4e6;--bd:#2b3846;--hd:#22303d;--ok:#4cc38a;--wn:#e8a36b}}
+*{box-sizing:border-box}body{margin:0;font:16px system-ui,Segoe UI,Arial;background:var(--bg);color:var(--tx)}
+main{max-width:900px;margin:0 auto;padding:16px}h1{font-size:1.4rem;color:var(--ac);margin:8px 0 12px}
+form{display:flex;gap:8px}input{flex:1;min-width:0;padding:12px;font-size:1rem;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+button{padding:12px 16px;border:0;border-radius:8px;background:var(--ac);color:var(--bg);font-weight:600;font-size:1rem}
+.mu{color:var(--mu);font-size:.9rem}.wn{color:var(--wn)}.chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.chip{background:var(--card);color:var(--tx);border:1px solid var(--bd);padding:6px 12px;border-radius:99px;font-weight:400;font-size:.9rem}
+.chip.on{background:var(--ac);color:var(--bg)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin:12px 0}
+.card h2{margin:0 0 2px;font-size:1.1rem;color:var(--ac)}.stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.stat{background:var(--hd);border-radius:8px;padding:8px 12px;min-width:90px}.stat b{display:block;font-size:1.2rem}.stat span{font-size:.75rem;color:var(--mu)}
+.badge{font-size:.75rem;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}.badge.in{color:var(--ok);border-color:var(--ok)}
+details{margin-top:8px}summary{cursor:pointer;color:var(--ac);font-weight:600}
+.tw{overflow-x:auto}table{border-collapse:collapse;margin:6px 0;font-size:.85rem}td,th{border:1px solid var(--bd);padding:5px 8px;text-align:left;white-space:nowrap}th{background:var(--hd)}
+h3{font-size:.9rem;margin:12px 0 2px}
+details.set{margin:10px 0}input.s{width:100%;margin-top:6px}</style></head><body><main>
+<h1>Darts Lookup</h1>
+<form id="f"><input id="q" placeholder="Player name (e.g. Nick Zimmer)" autocomplete="off" autocapitalize="words" required minlength="2"><button>Search</button></form>
+<p class="mu" id="st"></p><div class="chips" id="chips"></div><div id="out"></div>
+<details class="set"><summary>Connection settings</summary>
+<p class="mu">Tries a direct request first, then public relays. If those fail or get rate-limited, paste your own relay URL prefix (see README) and it is used first.</p>
+<input class="s" id="px" placeholder="https://your-worker.workers.dev/?url=">
+<p class="mu" id="via"></p></details>
+</main><script>
+const ROOT='https://www.bullseyegames.com/league/darts/',TTL=9e5;
+const RELAYS=['','https://corsproxy.io/?url=','https://api.allorigins.win/raw?url='];
+const $=id=>document.getElementById(id),cl=s=>(s||'').replace(/\s+/g,' ').trim();
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ls={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+const mem={};let good=null,data=null,cur=null;$('px').value=ls.get('dl:px')||'';$('px').onchange=()=>{ls.set('dl:px',$('px').value.trim());good=null};
+async function fetchText(u){
+  const custom=$('px').value.trim(),list=[...(custom?[custom]:[]),...RELAYS];
+  const order=good!==null&&list.includes(good)?[good,...list.filter(x=>x!==good)]:list;let err;
+  for(const p of order){try{
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),30000);
+    const r=await fetch(p?p+encodeURIComponent(u):u,{signal:ctl.signal});clearTimeout(t);
+    if(!r.ok)throw new Error('HTTP '+r.status);const h=await r.text();
+    if(!/<(table|a)\b/i.test(h))throw new Error('Unexpected response');
+    good=p;$('via').textContent='Connected '+(p?'via '+new URL(p).host:'directly');return h}catch(e){err=e}}
+  throw err}
+function parse(html){const d=new DOMParser().parseFromString(html,'text/html');d.querySelectorAll('script,style').forEach(e=>e.remove());
+  let head='';const out=[],h1=cl(d.querySelector('h1')?.textContent);
+  d.querySelectorAll('h1,h2,h3,h4,h5,h6,table').forEach(e=>{
+    const tb=e.tagName==='TABLE';
+    if(!tb){if(!e.closest('table'))head=cl(e.textContent);return}
+    if(e.parentElement.closest('table'))return;
+    const trs=[...e.querySelectorAll('tr')].map(tr=>[...tr.querySelectorAll('th,td')].map(c=>cl(c.textContent)));
+    if(trs.length<2)return;const hd=trs[0];
+    out.push({heading:head,headers:hd,rows:trs.slice(1).filter(r=>r.length===hd.length).map(r=>Object.fromEntries(hd.map((k,i)=>[k,r[i]])))})});
+  return{title:h1,tabs:out}}
+async function page(u){
+  let c=mem[u]||JSON.parse(ls.get('dl:'+u)||'null');
+  if(c&&Date.now()-c.t<TTL){mem[u]=c;return c}
+  c={t:Date.now(),...parse(await fetchText(u))};mem[u]=c;ls.set('dl:'+u,JSON.stringify(c));return c}
+async function urls(){
+  const d=new DOMParser().parseFromString(await fetchText(ROOT),'text/html'),s=new Set();
+  d.querySelectorAll('a[href]').forEach(a=>{try{const u=new URL(a.getAttribute('href'),ROOT);
+    if(/^(www\.)?bullseyegames\.com$/.test(u.host)&&u.pathname.startsWith('/day-schedule/'))s.add(u.origin+u.pathname)}catch{}});
+  if(!s.size)throw new Error('No league links found - site layout may have changed.');return[...s].sort()}
+function win(){const t=new Date();t.setHours(0,0,0,0);const sun=new Date(t);sun.setDate(t.getDate()-t.getDay());
+  const a=new Date(sun);a.setDate(a.getDate()-7);const b=new Date(sun);b.setDate(b.getDate()-1);return[a,b]}
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function analyze(url,p,toks,[a,b],players){
+  const names={};
+  p.tabs.forEach(t=>t.rows.forEach(r=>['Player','Captain'].forEach(k=>{const n=r[k];
+    if(n&&toks.every(x=>n.toLowerCase().includes(x)))(names[cl(n).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase())]??=[]).push([t,r])})));
+  for(const[name,hits]of Object.entries(names)){
+    const teams=[...new Set(hits.flatMap(([,r])=>['Team','TeamName'].filter(k=>k in r).map(k=>r[k])))].sort();
+    const playerTables=hits.map(([t,r])=>({heading:t.heading,headers:t.headers,rows:[r],scope:/week\s+\d+/i.test(t.heading)?'weekly':'overall'}));
+    const teamTables=[];
+    p.tabs.forEach(t=>{if(t.headers.includes('Player')||t.headers.includes('Captain'))return;
+      const rows=t.rows.filter(r=>teams.includes(r.Team)).map(r=>{r={...r};const m=/^(\d\d)\/(\d\d)\/(\d{4})$/.exec(r.Date||'');
+        if(m){const d=new Date(+m[3],m[1]-1,+m[2]);r._inWindow=d>=a&&d<=b}return r});
+      if(rows.length)teamTables.push({heading:t.heading,headers:t.headers,rows})});
+    (players[name]??=[]).push({title:p.title||url,url,teams,playerTables,teamTables})}}
+async function search(q){
+  const toks=q.toLowerCase().split(/\s+/),w=win(),errors=[],players={};
+  const list=await urls();let i=0,done=0;
+  await Promise.all([0,1,2,3].map(async()=>{while(i<list.length){const u=list[i++];
+    try{analyze(u,await page(u),toks,w,players)}catch(e){errors.push(u+': '+e.message)}
+    $('st').textContent=`Scanning leagues… ${++done}/${list.length}`}}));
+  return{scanned:list.length,window:[iso(w[0]),iso(w[1])],players,errors}}
+const tbl=(h,rows)=>`<div class="tw"><table><tr>${h.map(x=>`<th>${esc(x)}</th>`).join('')}</tr>${rows.map(r=>`<tr>${h.map(k=>`<td>${esc(r[k])}</td>`).join('')}</tr>`).join('')}</table></div>`;
+const fmtD=s=>new Date(s+'T00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
+function stat(v,l){return v==null?'':`<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`}
+function league(L){
+  const ov=L.playerTables.filter(t=>t.scope==='overall').map(t=>({t,r:t.rows[0]}));
+  const f=k=>ov.find(o=>k in o.r)?.r[k];
+  const st=L.teamTables.find(t=>/standing/i.test(t.heading))?.rows[0];
+  const lm=L.teamTables.find(t=>/last match/i.test(t.heading))?.rows[0];
+  const cap=L.teamTables.some(t=>/^teams$/i.test(t.heading));
+  let h=`<div class="card"><h2>${esc(L.title)}</h2><div class="mu">${esc(L.teams.join(', '))}${cap?' · captain':''} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a></div><div class="stats">`
+   +stat(f('MPR'),'Cricket MPR')+stat(f('PPD'),'X01 PPD')+(st?stat(`${st.Wins}-${st.Losses}`,`Team (${st['Win %']}%)`):'')+'</div>';
+  if(lm)h+=`<div>Last match: <b>${esc(lm.Date)}</b> vs ${esc(lm.Against)} · ${esc(lm.Wins)}-${esc(lm.Losses)} <span class="badge ${lm._inWindow?'in':''}">${lm._inWindow?'last week':'outside last week'}</span></div>`;
+  const wk=L.playerTables.filter(t=>t.scope==='weekly');
+  if(!wk.length)h+='<p class="mu">No row in the published weekly tables (that does not mean no play).</p>';
+  h+='<details><summary>All tables</summary>';
+  L.teamTables.forEach(t=>h+=`<h3>${esc(t.heading)}</h3>`+tbl(t.headers,t.rows));
+  L.playerTables.forEach(t=>h+=`<h3>${esc(t.heading)} <span class="mu">(${t.scope==='weekly'?'published weekly, week not dated':'season to date'})</span></h3>`+tbl(t.headers,t.rows));
+  return h+'</details></div>';
+}
+function render(){
+  const names=Object.keys(data.players);
+  $('chips').innerHTML=names.length>1?names.map(n=>`<button type="button" class="chip ${n===cur?'on':''}" data-n="${esc(n)}">${esc(n)} (${data.players[n].length})</button>`).join(''):'';
+  $('out').innerHTML=cur?data.players[cur].map(league).join(''):'<p>No matching players found.</p>';
+  $('st').innerHTML=`Scanned ${data.scanned} leagues · last full week ${fmtD(data.window[0])}–${fmtD(data.window[1])} · season totals are current, not end-of-week.`+(data.errors.length?` <span class="wn">${data.errors.length} page(s) failed.</span>`:'');
+}
+$('chips').onclick=e=>{const n=e.target.dataset?.n;if(n){cur=n;render()}};
+
+$('f').onsubmit=async e=>{e.preventDefault();const q=$('q').value.trim();
+  $('st').textContent='Scanning leagues…';$('out').innerHTML='';$('chips').innerHTML='';
+  try{data=await search(q);
+    if(data.scanned&&data.errors.length===data.scanned)throw new Error('All league pages failed: '+data.errors[0]);
+    cur=Object.keys(data.players).sort((a,b)=>data.players[b].length-data.players[a].length)[0]||null;render();
+  }catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}. Open Connection settings below.</span>`}};
+</script></body></html>
