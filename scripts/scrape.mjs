@@ -31,7 +31,12 @@ function parse(html) {
     tabs.push({ heading: head, headers: hd, rows: trs.slice(hi + 1).filter(r => r.length === hd.length).map(r => Object.fromEntries(hd.map((k, i) => [k, r[i]]))) });
   });
   const iframes = [...d.querySelectorAll('iframe[src]')].map(i => i.getAttribute('src'));
-  return { title, tabs, iframes };
+  // PDF links (schedules are published as PDFs inside the "Schedule" tab)
+  const pdfs = [...d.querySelectorAll('a[href]')].filter(a => /\.pdf(\?|#|$)/i.test(a.getAttribute('href'))).map(a => {
+    const sec = a.closest('.w-tabs-section');
+    return { url: a.getAttribute('href'), label: cl(a.textContent), schedule: !!sec && /schedule/i.test(sec.querySelector('.w-tabs-section-title')?.textContent || '') };
+  });
+  return { title, tabs, iframes, pdfs };
 }
 const dir = new JSDOM(await get(ROOT)).window.document, set = new Set();
 dir.querySelectorAll('a[href]').forEach(a => { try {
@@ -44,7 +49,8 @@ if (!urls.length) { console.error('No league links found - layout changed?'); pr
 const pages = [], errors = [];
 for (const url of urls) {
   try {
-    const { iframes, ...pg } = parse(await get(url));
+    const { iframes, pdfs, ...pg } = parse(await get(url));
+    pg.pdfs = pdfs.map(p => ({ ...p, url: new URL(p.url, url).href }));
     const embeds = [];
     for (const src of iframes.slice(0, 4)) {
       try {
