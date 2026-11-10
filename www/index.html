@@ -2,66 +2,62 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Darts Lookup</title>
 <style>
-:root{--bg:#f5f7fa;--card:#fff;--tx:#202830;--mu:#5b6772;--ac:#183957;--bd:#d5dde6;--hd:#e4edf7;--ok:#1a7f4b;--wn:#963400}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1720;--card:#18222d;--tx:#e6edf3;--mu:#93a1ae;--ac:#7fb4e6;--bd:#2b3846;--hd:#22303d;--ok:#4cc38a;--wn:#e8a36b}}
+:root{--bg:#f5f7fa;--tx:#202830;--ok:#1a7f4b;--wn:#963400}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1720;--tx:#e6edf3;--ok:#4cc38a;--wn:#e8a36b}}
+:root{--card:color-mix(in srgb,var(--bg),var(--tx) 5%);--hd:color-mix(in srgb,var(--bg),var(--tx) 13%);--bd:color-mix(in srgb,var(--bg),var(--tx) 24%);--mu:color-mix(in srgb,var(--tx),var(--bg) 40%);--ac:color-mix(in srgb,var(--tx),#4a90d9 45%)}
 *{box-sizing:border-box}body{margin:0;font:16px system-ui,Segoe UI,Arial;background:var(--bg);color:var(--tx)}
-main{max-width:900px;margin:0 auto;padding:16px}h1{font-size:1.4rem;color:var(--ac);margin:8px 0 12px}
-form{display:flex;gap:8px}input{flex:1;min-width:0;padding:12px;font-size:1rem;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+main{max-width:900px;margin:0 auto;padding:16px}a{color:var(--ac)}
+.top{display:flex;justify-content:space-between;align-items:center}h1{font-size:1.4rem;color:var(--ac);margin:8px 0 12px}
+form{display:flex;gap:8px}input[type=text],input:not([type]){flex:1;min-width:0;padding:12px;font-size:1rem;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
 button{padding:12px 16px;border:0;border-radius:8px;background:var(--ac);color:var(--bg);font-weight:600;font-size:1rem}
 .mu{color:var(--mu);font-size:.9rem}.wn{color:var(--wn)}.chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
-.chip{background:var(--card);color:var(--tx);border:1px solid var(--bd);padding:6px 12px;border-radius:99px;font-weight:400;font-size:.9rem}
-.chip.on{background:var(--ac);color:var(--bg)}
+.chip{background:var(--card);color:var(--tx);border:1px solid var(--bd);padding:6px 12px;border-radius:99px;font-weight:400;font-size:.9rem}.chip.on{background:var(--ac);color:var(--bg)}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin:12px 0}
 .card h2{margin:0 0 2px;font-size:1.1rem;color:var(--ac)}.stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
 .stat{background:var(--hd);border-radius:8px;padding:8px 12px;min-width:90px}.stat b{display:block;font-size:1.2rem}.stat span{font-size:.75rem;color:var(--mu)}
 .badge{font-size:.75rem;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}.badge.in{color:var(--ok);border-color:var(--ok)}
 details{margin-top:8px}summary{cursor:pointer;color:var(--ac);font-weight:600}
 .tw{overflow-x:auto}table{border-collapse:collapse;margin:6px 0;font-size:.85rem}td,th{border:1px solid var(--bd);padding:5px 8px;text-align:left;white-space:nowrap}th{background:var(--hd)}
-h3{font-size:.9rem;margin:12px 0 2px}
-details.set{margin:10px 0}input.s{width:100%;margin-top:6px}</style></head><body><main>
-<h1>Darts Lookup</h1>
+tr.hl td{background:var(--hd);font-weight:700}h3{font-size:.95rem;margin:14px 0 2px}
+#pal{display:none}#pal.open{display:block}#pal label{margin-right:12px;font-size:.9rem}#pal input[type=color]{width:44px;height:32px;padding:0;border:1px solid var(--bd);vertical-align:middle;background:none}
+</style></head><body><main>
+<div class="top"><h1>Darts Lookup</h1><button class="chip" id="pb" type="button" aria-label="Colors">🎨 Colors</button></div>
+<div class="card" id="pal"><div class="chips" id="pre"></div>
+<label>Background <input type="color" id="cb"></label><label>Text <input type="color" id="ct"></label>
+<button class="chip" id="rs" type="button">Reset</button></div>
 <form id="f"><input id="q" placeholder="Player name (e.g. Nick Zimmer)" autocomplete="off" autocapitalize="words" required minlength="2"><button>Search</button></form>
 <p class="mu" id="st"></p><div class="chips" id="chips"></div><div id="out"></div>
-<details class="set"><summary>Connection settings</summary>
-<p class="mu">Tries a direct request first, then public relays. If those fail or get rate-limited, paste your own relay URL prefix (see README) and it is used first.</p>
-<input class="s" id="px" placeholder="https://your-worker.workers.dev/?url=">
-<p class="mu" id="via"></p></details>
 </main><script>
-const ROOT='https://www.bullseyegames.com/league/darts/',TTL=9e5;
-const RELAYS=['','https://corsproxy.io/?url=','https://api.allorigins.win/raw?url='];
+const DATA_URL='https://raw.githubusercontent.com/nzimmer-apps/DartStats-Bullseye/main/data.json',TTL=864e5;
+const TEAMK=['Team','TeamName','Against','Opponent','Home','Away'],PRE={Light:['#f5f7fa','#202830'],Dark:['#0f1720','#e6edf3'],Midnight:['#000000','#9fd3ff'],Sepia:['#f4ecd8','#4a3b28'],'High contrast':['#000000','#ffff00']};
 const $=id=>document.getElementById(id),cl=s=>(s||'').replace(/\s+/g,' ').trim();
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ls={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
-const mem={};let good=null,data=null,cur=null;$('px').value=ls.get('dl:px')||'';$('px').onchange=()=>{ls.set('dl:px',$('px').value.trim());good=null};
-async function fetchText(u){
-  const custom=$('px').value.trim(),list=[...(custom?[custom]:[]),...RELAYS];
-  const order=good!==null&&list.includes(good)?[good,...list.filter(x=>x!==good)]:list;let err;
-  for(const p of order){try{
-    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),30000);
-    const r=await fetch(p?p+encodeURIComponent(u):u,{signal:ctl.signal});clearTimeout(t);
-    if(!r.ok)throw new Error('HTTP '+r.status);const h=await r.text();
-    if(!/<(table|a)\b/i.test(h))throw new Error('Unexpected response');
-    good=p;$('via').textContent='Connected '+(p?'via '+new URL(p).host:'directly');return h}catch(e){err=e}}
-  throw err}
-function parse(html){const d=new DOMParser().parseFromString(html,'text/html');d.querySelectorAll('script,style').forEach(e=>e.remove());
-  let head='';const out=[],h1=cl(d.querySelector('h1')?.textContent);
-  d.querySelectorAll('h1,h2,h3,h4,h5,h6,table').forEach(e=>{
-    const tb=e.tagName==='TABLE';
-    if(!tb){if(!e.closest('table'))head=cl(e.textContent);return}
-    if(e.parentElement.closest('table'))return;
-    const trs=[...e.querySelectorAll('tr')].map(tr=>[...tr.querySelectorAll('th,td')].map(c=>cl(c.textContent)));
-    if(trs.length<2)return;const hd=trs[0];
-    out.push({heading:head,headers:hd,rows:trs.slice(1).filter(r=>r.length===hd.length).map(r=>Object.fromEntries(hd.map((k,i)=>[k,r[i]])))})});
-  return{title:h1,tabs:out}}
-async function page(u){
-  let c=mem[u]||JSON.parse(ls.get('dl:'+u)||'null');
-  if(c&&Date.now()-c.t<TTL){mem[u]=c;return c}
-  c={t:Date.now(),...parse(await fetchText(u))};mem[u]=c;ls.set('dl:'+u,JSON.stringify(c));return c}
-async function urls(){
-  const d=new DOMParser().parseFromString(await fetchText(ROOT),'text/html'),s=new Set();
-  d.querySelectorAll('a[href]').forEach(a=>{try{const u=new URL(a.getAttribute('href'),ROOT);
-    if(/^(www\.)?bullseyegames\.com$/.test(u.host)&&u.pathname.startsWith('/day-schedule/'))s.add(u.origin+u.pathname)}catch{}});
-  if(!s.size)throw new Error('No league links found - site layout may have changed.');return[...s].sort()}
+const ls={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}},del(k){try{localStorage.removeItem(k)}catch{}}};
+let DB=null,data=null,cur=null,view=null;
+const nrm=s=>cl(s).toLowerCase().replace(/[^a-z0-9]/g,''),same=(a,b)=>{a=nrm(a);b=nrm(b);return!!a&&!!b&&(a===b||(Math.min(a.length,b.length)>=8&&(a.startsWith(b)||b.startsWith(a))))};
+const col=(hd,n)=>hd.find(h=>h.toLowerCase()===n),schedCols=hd=>{const h=col(hd,'home'),a=col(hd,'away');return h&&a?{h,a,w:col(hd,'week'),d:col(hd,'date')}:null};
+const parseD=s=>{const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s||'');return m?new Date(+m[3],m[1]-1,+m[2]):null};
+function normSched(t){const c=schedCols(t.headers);if(!c)return;let wk='',dt='';
+  t.rows=t.rows.filter(r=>{if(c.w){if(r[c.w])wk=r[c.w];else r[c.w]=wk}if(c.d){if(r[c.d])dt=r[c.d];else r[c.d]=dt}return r[c.h]||r[c.a]})}
+const prep=db=>{db.pages.forEach(p=>p.tabs.forEach(normSched));return db};
+/* colors */
+function applyColors(){const s=document.documentElement.style,b=ls.get('dl:bg'),t=ls.get('dl:tx');
+  b?s.setProperty('--bg',b):s.removeProperty('--bg');t?s.setProperty('--tx',t):s.removeProperty('--tx');
+  const g=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  if(/^#[0-9a-f]{6}$/i.test(g('--bg')))$('cb').value=g('--bg');if(/^#[0-9a-f]{6}$/i.test(g('--tx')))$('ct').value=g('--tx')}
+$('pre').innerHTML=Object.keys(PRE).map(n=>`<button type="button" class="chip" data-pre="${esc(n)}">${esc(n)}</button>`).join('');
+$('pb').onclick=()=>$('pal').classList.toggle('open');
+$('pre').onclick=e=>{const p=PRE[e.target.dataset.pre];if(p){ls.set('dl:bg',p[0]);ls.set('dl:tx',p[1]);applyColors()}};
+$('cb').oninput=e=>{ls.set('dl:bg',e.target.value);applyColors()};$('ct').oninput=e=>{ls.set('dl:tx',e.target.value);applyColors()};
+$('rs').onclick=()=>{ls.del('dl:bg');ls.del('dl:tx');applyColors()};applyColors();
+/* data */
+async function loadDB(force){
+  if(DB&&!force)return DB;
+  const ts=+ls.get('dl:ts')||0,c=ls.get('dl:db');
+  if(!force&&c&&Date.now()-ts<TTL){DB=prep(JSON.parse(c));return DB}
+  try{const r=await fetch(DATA_URL+'?t='+Math.floor(Date.now()/36e5));if(!r.ok)throw new Error('HTTP '+r.status);
+    DB=prep(await r.json());ls.set('dl:db',JSON.stringify(DB));ls.set('dl:ts',String(Date.now()));return DB}
+  catch(e){if(c){DB=prep(JSON.parse(c));DB.offline=true;return DB}throw new Error('Could not load stats data ('+e.message+')')}}
 function win(){const t=new Date();t.setHours(0,0,0,0);const sun=new Date(t);sun.setDate(t.getDate()-t.getDay());
   const a=new Date(sun);a.setDate(a.getDate()-7);const b=new Date(sun);b.setDate(b.getDate()-1);return[a,b]}
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -74,48 +70,76 @@ function analyze(url,p,toks,[a,b],players){
     const playerTables=hits.map(([t,r])=>({heading:t.heading,headers:t.headers,rows:[r],scope:/week\s+\d+/i.test(t.heading)?'weekly':'overall'}));
     const teamTables=[];
     p.tabs.forEach(t=>{if(t.headers.includes('Player')||t.headers.includes('Captain'))return;
-      const rows=t.rows.filter(r=>teams.includes(r.Team)).map(r=>{r={...r};const m=/^(\d\d)\/(\d\d)\/(\d{4})$/.exec(r.Date||'');
+      const rows=t.rows.filter(r=>teams.includes(r.Team)).map(r=>{r={...r};const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(r.Date||'');
         if(m){const d=new Date(+m[3],m[1]-1,+m[2]);r._inWindow=d>=a&&d<=b}return r});
       if(rows.length)teamTables.push({heading:t.heading,headers:t.headers,rows})});
     (players[name]??=[]).push({title:p.title||url,url,teams,playerTables,teamTables})}}
 async function search(q){
-  const toks=q.toLowerCase().split(/\s+/),w=win(),errors=[],players={};
-  const list=await urls();let i=0,done=0;
-  await Promise.all([0,1,2,3].map(async()=>{while(i<list.length){const u=list[i++];
-    try{analyze(u,await page(u),toks,w,players)}catch(e){errors.push(u+': '+e.message)}
-    $('st').textContent=`Scanning leagues… ${++done}/${list.length}`}}));
-  return{scanned:list.length,window:[iso(w[0]),iso(w[1])],players,errors}}
-const tbl=(h,rows)=>`<div class="tw"><table><tr>${h.map(x=>`<th>${esc(x)}</th>`).join('')}</tr>${rows.map(r=>`<tr>${h.map(k=>`<td>${esc(r[k])}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  const toks=q.toLowerCase().split(/\s+/),w=win(),players={},db=await loadDB();
+  db.pages.forEach(p=>analyze(p.url,p,toks,w,players));
+  return{scanned:db.scanned,window:[iso(w[0]),iso(w[1])],players,errors:db.errors||[],generated:db.generated,offline:db.offline}}
+/* rendering */
+function cell(k,v,u){if(!v)return'';
+  if(TEAMK.includes(k))return`<a href="#" data-u="${esc(u)}" data-t="${esc(v)}">${esc(v)}</a>`;
+  if(k==='Player'||k==='Captain')return`<a href="#" data-p="${esc(v)}">${esc(v)}</a>`;return esc(v)}
+const tbl=(h,rows,u,hl)=>`<div class="tw"><table><tr>${h.map(x=>`<th>${esc(x)}</th>`).join('')}</tr>${rows.map(r=>`<tr${hl&&hl(r)?' class="hl"':''}>${h.map(k=>`<td>${cell(k,r[k],u)}</td>`).join('')}</tr>`).join('')}</table></div>`;
 const fmtD=s=>new Date(s+'T00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
-function stat(v,l){return v==null?'':`<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`}
+const stat=(v,l)=>v==null?'':`<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
+const tlink=(u,t)=>`<a href="#" data-u="${esc(u)}" data-t="${esc(t)}">${esc(t)}</a>`;
+const pdfOf=u=>{const p=DB.pages.find(x=>x.url===u)?.pdfs||[];return p.find(x=>x.schedule)||p[0]};
+const pdfLink=u=>{const p=pdfOf(u);return p?`<a href="${esc(p.url)}" target="_blank" rel="noopener">Schedule (PDF)</a>`:''};
+function nextMatch(L){const p=DB.pages.find(x=>x.url===L.url),t=p?.tabs.find(t=>schedCols(t.headers));if(!t)return'';
+  const c=schedCols(t.headers),td=new Date();td.setHours(0,0,0,0);
+  for(const r of t.rows){const d=parseD(r[c.d]);if(!d||d<td)continue;const hm=L.teams.find(x=>same(r[c.h],x)),aw=L.teams.find(x=>same(r[c.a],x));
+    if(hm||aw)return`<div>Next match: <b>${esc(r[c.d])}</b> vs ${esc(hm?r[c.a]:r[c.h])} (${hm?'home':'away'})</div>`}return''}
 function league(L){
-  const ov=L.playerTables.filter(t=>t.scope==='overall').map(t=>({t,r:t.rows[0]}));
-  const f=k=>ov.find(o=>k in o.r)?.r[k];
-  const st=L.teamTables.find(t=>/standing/i.test(t.heading))?.rows[0];
-  const lm=L.teamTables.find(t=>/last match/i.test(t.heading))?.rows[0];
-  const cap=L.teamTables.some(t=>/^teams$/i.test(t.heading));
-  let h=`<div class="card"><h2>${esc(L.title)}</h2><div class="mu">${esc(L.teams.join(', '))}${cap?' · captain':''} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a></div><div class="stats">`
+  const ov=L.playerTables.filter(t=>t.scope==='overall').map(t=>t.rows[0]),f=k=>ov.find(r=>k in r)?.[k];
+  const st=L.teamTables.find(t=>/standing/i.test(t.heading))?.rows[0],lm=L.teamTables.find(t=>/last match/i.test(t.heading))?.rows[0];
+  let h=`<div class="card"><h2>${esc(L.title)}</h2><div class="mu">${L.teams.map(t=>tlink(L.url,t)).join(', ')} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a>${pdfOf(L.url)?' · '+pdfLink(L.url):''}</div><div class="stats">`
    +stat(f('MPR'),'Cricket MPR')+stat(f('PPD'),'X01 PPD')+(st?stat(`${st.Wins}-${st.Losses}`,`Team (${st['Win %']}%)`):'')+'</div>';
   if(lm)h+=`<div>Last match: <b>${esc(lm.Date)}</b> vs ${esc(lm.Against)} · ${esc(lm.Wins)}-${esc(lm.Losses)} <span class="badge ${lm._inWindow?'in':''}">${lm._inWindow?'last week':'outside last week'}</span></div>`;
-  const wk=L.playerTables.filter(t=>t.scope==='weekly');
-  if(!wk.length)h+='<p class="mu">No row in the published weekly tables (that does not mean no play).</p>';
-  h+='<details><summary>All tables</summary>';
-  L.teamTables.forEach(t=>h+=`<h3>${esc(t.heading)}</h3>`+tbl(t.headers,t.rows));
-  L.playerTables.forEach(t=>h+=`<h3>${esc(t.heading)} <span class="mu">(${t.scope==='weekly'?'published weekly, week not dated':'season to date'})</span></h3>`+tbl(t.headers,t.rows));
-  return h+'</details></div>';
-}
+  h+=nextMatch(L);
+  if(!L.playerTables.some(t=>t.scope==='weekly'))h+='<p class="mu">No row in the published weekly tables (that does not mean no play).</p>';
+  h+='<p class="mu">Tap a team to see its full roster, standings and schedule.</p><details><summary>All tables</summary>';
+  L.teamTables.forEach(t=>h+=`<h3>${esc(t.heading)}</h3>`+tbl(t.headers,t.rows,L.url));
+  L.playerTables.forEach(t=>h+=`<h3>${esc(t.heading)} <span class="mu">(${t.scope==='weekly'?'published weekly, week not dated':'season to date'})</span></h3>`+tbl(t.headers,t.rows,L.url));
+  return h+'</details></div>'}
+function teamView(u,T){
+  const p=DB.pages.find(x=>x.url===u),eq=v=>same(v,T),isT=r=>eq(r.Team??r.TeamName??'');
+  if(!p)return'<p class="wn">League data not found.</p>';
+  const secs=[];
+  p.tabs.forEach(t=>{const pl=t.headers.includes('Player')||t.headers.includes('Captain');
+    const c=schedCols(t.headers);let rows,hd=t.headers;
+    if(c){const td=new Date();td.setHours(0,0,0,0);let nx=false;
+      rows=t.rows.filter(r=>eq(r[c.h])||eq(r[c.a])).map(r=>{const d=parseD(r[c.d]),o={Week:r[c.w]||'',Date:r[c.d]||'',Opponent:eq(r[c.h])?r[c.a]:r[c.h],'H/A':eq(r[c.h])?'Home':'Away'};
+        if(!nx&&d&&d>=td){o._next=true;nx=true}return o});hd=['Week','Date','Opponent','H/A']}
+    else rows=pl?t.rows.filter(isT):/standing/i.test(t.heading)?t.rows:t.rows.filter(r=>Object.values(r).some(eq));
+    if(rows.length)secs.push({t,rows,pl,hd,sc:!!c||/schedul/i.test(t.heading)})});
+  secs.sort((a,b)=>(a.pl-b.pl)||(b.sc-a.sc));
+  let h=`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>${esc(T)}</h2><div class="mu">${esc(p.title)} · <a href="${esc(u)}" target="_blank" rel="noopener">league page</a>${pdfOf(u)?' · '+pdfLink(u):''}</div>`;
+  const full=p.tabs.find(t=>schedCols(t.headers));
+  if(!secs.some(s=>s.sc))h+=`<p class="mu">${full?'No schedule rows matched this team’s name (the schedule may spell it differently). See the full schedule below.':pdfOf(u)?'This league publishes its schedule as a PDF: '+pdfLink(u)+'.':'No schedule table was found on this league’s page.'}</p>`;
+  secs.forEach(s=>h+=`<h3>${esc(s.t.heading||'Table')}${s.pl?' <span class="mu">(team roster)</span>':''}</h3>`+tbl(s.hd,s.rows,u,/standing/i.test(s.t.heading)?isT:r=>r._next));
+  if(full)h+=`<details><summary>Full league schedule</summary>${tbl(full.headers,full.rows,u)}</details>`;
+  h+=`<details><summary>Tables on this league’s page</summary><p class="mu">${p.tabs.map(t=>esc(t.heading||'(untitled)')).join('<br>')}</p></details>`;
+  return h+'</div>'}
+function status(){if(!data)return;const g=new Date(data.generated).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  $('st').innerHTML=`Scanned ${data.scanned} leagues · last full week ${fmtD(data.window[0])}–${fmtD(data.window[1])} · stats updated ${g}${data.offline?' (offline copy)':''} · <a href="#" id="rf">Refresh</a>`}
 function render(){
+  window.scrollTo(0,0);
+  if(view){$('chips').innerHTML='';$('out').innerHTML=teamView(view.u,view.t);return status()}
   const names=Object.keys(data.players);
   $('chips').innerHTML=names.length>1?names.map(n=>`<button type="button" class="chip ${n===cur?'on':''}" data-n="${esc(n)}">${esc(n)} (${data.players[n].length})</button>`).join(''):'';
-  $('out').innerHTML=cur?data.players[cur].map(league).join(''):'<p>No matching players found.</p>';
-  $('st').innerHTML=`Scanned ${data.scanned} leagues · last full week ${fmtD(data.window[0])}–${fmtD(data.window[1])} · season totals are current, not end-of-week.`+(data.errors.length?` <span class="wn">${data.errors.length} page(s) failed.</span>`:'');
-}
+  $('out').innerHTML=cur?data.players[cur].map(league).join(''):'<p>No matching players found.</p>';status()}
 $('chips').onclick=e=>{const n=e.target.dataset?.n;if(n){cur=n;render()}};
-
-$('f').onsubmit=async e=>{e.preventDefault();const q=$('q').value.trim();
-  $('st').textContent='Scanning leagues…';$('out').innerHTML='';$('chips').innerHTML='';
-  try{data=await search(q);
-    if(data.scanned&&data.errors.length===data.scanned)throw new Error('All league pages failed: '+data.errors[0]);
-    cur=Object.keys(data.players).sort((a,b)=>data.players[b].length-data.players[a].length)[0]||null;render();
-  }catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}. Open Connection settings below.</span>`}};
+$('out').onclick=e=>{const a=e.target.closest('a[data-t],a[data-p],#back');if(!a)return;e.preventDefault();
+  if(a.id==='back'){view=null;return render()}
+  if(a.dataset.t){view={u:a.dataset.u,t:a.dataset.t};return render()}
+  $('q').value=a.dataset.p;$('f').requestSubmit()};
+$('st').onclick=async e=>{if(e.target.id!=='rf')return;e.preventDefault();$('st').textContent='Refreshing…';
+  try{await loadDB(true);const q=$('q').value.trim();if(q){data=await search(q);render()}else{data={...data,generated:DB.generated,offline:false};status()}}catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
+$('f').onsubmit=async e=>{e.preventDefault();const q=$('q').value.trim();view=null;
+  $('st').textContent='Loading…';$('out').innerHTML='';$('chips').innerHTML='';
+  try{data=await search(q);cur=Object.keys(data.players).sort((a,b)=>data.players[b].length-data.players[a].length)[0]||null;render()}
+  catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
 </script></body></html>
