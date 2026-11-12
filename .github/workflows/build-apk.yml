@@ -15,7 +15,16 @@ jobs:
       - run: npm install
       - run: npx cap add android
       - run: npx cap sync android
+      - name: Use the fixed signing key and an increasing version number
+        run: |
+          mkdir -p ~/.android
+          cp debug.keystore ~/.android/debug.keystore
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
       - run: chmod +x android/gradlew && cd android && ./gradlew assembleDebug
+      - name: Show the signing certificate
+        run: keytool -printcert -jarfile android/app/build/outputs/apk/debug/app-debug.apk | grep -i "SHA256"
       - uses: actions/upload-artifact@v4
         with:
           name: darts-lookup-apk
