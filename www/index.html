@@ -18,6 +18,8 @@ button{padding:12px 16px;border:0;border-radius:8px;background:var(--ac);color:v
 .badge{font-size:.75rem;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}.badge.in{color:var(--ok);border-color:var(--ok)}
 details{margin-top:8px}summary{cursor:pointer;color:var(--ac);font-weight:600}
 .tw{overflow-x:auto}table{border-collapse:collapse;margin:6px 0;font-size:.85rem}td,th{border:1px solid var(--bd);padding:5px 8px;text-align:left;white-space:nowrap}th{background:var(--hd)}
+.pdfbox{overflow-x:auto;border:1px solid var(--bd);border-radius:8px;margin:8px 0;background:#fff;color:#202830;padding:4px}.pdfbox canvas{display:block;margin:0 0 6px}.pdfbox p{margin:8px;color:#202830}
+#out th{cursor:pointer}
 tr.hl td{background:var(--hd);font-weight:700}h3{font-size:.95rem;margin:14px 0 2px}
 #pal{display:none}#pal.open{display:block}#pal label{margin-right:12px;font-size:.9rem}#pal input[type=color]{width:44px;height:32px;padding:0;border:1px solid var(--bd);vertical-align:middle;background:none}
 </style></head><body><main>
@@ -26,14 +28,14 @@ tr.hl td{background:var(--hd);font-weight:700}h3{font-size:.95rem;margin:14px 0 
 <label>Background <input type="color" id="cb"></label><label>Text <input type="color" id="ct"></label>
 <button class="chip" id="rs" type="button">Reset</button></div>
 <form id="f"><input id="q" placeholder="Player name (e.g. Nick Zimmer)" autocomplete="off" autocapitalize="words" required minlength="2"><button>Search</button></form>
-<p class="mu" id="st"></p><div class="chips" id="chips"></div><div id="out"></div>
+<p class="mu"><a href="#" id="bl">Browse all leagues</a></p><p class="mu" id="st"></p><div class="chips" id="chips"></div><div id="out"></div>
 </main><script>
 const DATA_URL='https://raw.githubusercontent.com/nzimmer-apps/DartStats-Bullseye/main/data.json',TTL=864e5;
 const TEAMK=['Team','TeamName','Against','Opponent','Home','Away'],PRE={Light:['#f5f7fa','#202830'],Dark:['#0f1720','#e6edf3'],Midnight:['#000000','#9fd3ff'],Sepia:['#f4ecd8','#4a3b28'],'High contrast':['#000000','#ffff00']};
 const $=id=>document.getElementById(id),cl=s=>(s||'').replace(/\s+/g,' ').trim();
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ls={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}},del(k){try{localStorage.removeItem(k)}catch{}}};
-let DB=null,data=null,cur=null,view=null;
+let DB=null,data=null,cur=null,view=null,stack=[];
 const nrm=s=>cl(s).toLowerCase().replace(/[^a-z0-9]/g,''),same=(a,b)=>{a=nrm(a);b=nrm(b);return!!a&&!!b&&(a===b||(Math.min(a.length,b.length)>=8&&(a.startsWith(b)||b.startsWith(a))))};
 const col=(hd,n)=>hd.find(h=>h.toLowerCase()===n),schedCols=hd=>{const h=col(hd,'home'),a=col(hd,'away');return h&&a?{h,a,w:col(hd,'week'),d:col(hd,'date')}:null};
 const parseD=s=>{const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s||'');return m?new Date(+m[3],m[1]-1,+m[2]):null};
@@ -58,10 +60,7 @@ async function loadDB(force){
   try{const r=await fetch(DATA_URL+'?t='+Math.floor(Date.now()/36e5));if(!r.ok)throw new Error('HTTP '+r.status);
     DB=prep(await r.json());ls.set('dl:db',JSON.stringify(DB));ls.set('dl:ts',String(Date.now()));return DB}
   catch(e){if(c){DB=prep(JSON.parse(c));DB.offline=true;return DB}throw new Error('Could not load stats data ('+e.message+')')}}
-function win(){const t=new Date();t.setHours(0,0,0,0);const sun=new Date(t);sun.setDate(t.getDate()-t.getDay());
-  const a=new Date(sun);a.setDate(a.getDate()-7);const b=new Date(sun);b.setDate(b.getDate()-1);return[a,b]}
-const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-function analyze(url,p,toks,[a,b],players){
+function analyze(url,p,toks,players){
   const names={};
   p.tabs.forEach(t=>t.rows.forEach(r=>['Player','Captain'].forEach(k=>{const n=r[k];
     if(n&&toks.every(x=>n.toLowerCase().includes(x)))(names[cl(n).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase())]??=[]).push([t,r])})));
@@ -70,36 +69,62 @@ function analyze(url,p,toks,[a,b],players){
     const playerTables=hits.map(([t,r])=>({heading:t.heading,headers:t.headers,rows:[r],scope:/week\s+\d+/i.test(t.heading)?'weekly':'overall'}));
     const teamTables=[];
     p.tabs.forEach(t=>{if(t.headers.includes('Player')||t.headers.includes('Captain'))return;
-      const rows=t.rows.filter(r=>teams.includes(r.Team)).map(r=>{r={...r};const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(r.Date||'');
-        if(m){const d=new Date(+m[3],m[1]-1,+m[2]);r._inWindow=d>=a&&d<=b}return r});
+      const rows=t.rows.filter(r=>teams.includes(r.Team));
       if(rows.length)teamTables.push({heading:t.heading,headers:t.headers,rows})});
     (players[name]??=[]).push({title:p.title||url,url,teams,playerTables,teamTables})}}
 async function search(q){
-  const toks=q.toLowerCase().split(/\s+/),w=win(),players={},db=await loadDB();
-  db.pages.forEach(p=>analyze(p.url,p,toks,w,players));
-  return{scanned:db.scanned,window:[iso(w[0]),iso(w[1])],players,errors:db.errors||[],generated:db.generated,offline:db.offline}}
+  const toks=q.toLowerCase().split(/\s+/),players={},db=await loadDB();
+  db.pages.forEach(p=>analyze(p.url,p,toks,players));
+  return{scanned:db.scanned,players,errors:db.errors||[],generated:db.generated,offline:db.offline}}
 /* rendering */
 function cell(k,v,u){if(!v)return'';
   if(TEAMK.includes(k))return`<a href="#" data-u="${esc(u)}" data-t="${esc(v)}">${esc(v)}</a>`;
   if(k==='Player'||k==='Captain')return`<a href="#" data-p="${esc(v)}">${esc(v)}</a>`;return esc(v)}
 const tbl=(h,rows,u,hl)=>`<div class="tw"><table><tr>${h.map(x=>`<th>${esc(x)}</th>`).join('')}</tr>${rows.map(r=>`<tr${hl&&hl(r)?' class="hl"':''}>${h.map(k=>`<td>${cell(k,r[k],u)}</td>`).join('')}</tr>`).join('')}</table></div>`;
-const fmtD=s=>new Date(s+'T00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
 const stat=(v,l)=>v==null?'':`<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
 const tlink=(u,t)=>`<a href="#" data-u="${esc(u)}" data-t="${esc(t)}">${esc(t)}</a>`;
 const pdfOf=u=>{const p=DB.pages.find(x=>x.url===u)?.pdfs||[];return p.find(x=>x.schedule)||p[0]};
-const pdfLink=u=>{const p=pdfOf(u);return p?`<a href="${esc(p.url)}" target="_blank" rel="noopener">Schedule (PDF)</a>`:''};
+const pdfLink=u=>{const p=pdfOf(u);return p?`<a href="#" data-pdf="${esc(p.url)}">View schedule</a> (<a href="${esc(p.url)}" target="_blank" rel="noopener">open PDF</a>)`:''};
+const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',PDFW='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const loadScript=src=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('Could not load the PDF viewer'));document.head.appendChild(s)});
+async function pdfBytes(url){
+  const H=window.Capacitor?.Plugins?.CapacitorHttp;
+  if(H){const r=await H.get({url,responseType:'blob'});if(r.status&&r.status>=400)throw new Error('HTTP '+r.status);
+    const b=atob(r.data),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+  const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return new Uint8Array(await r.arrayBuffer())}
+async function showPdf(url,box){
+  box.innerHTML='<p>Loading schedule…</p>';
+  try{if(!window.pdfjsLib){await loadScript(PDFJS);pdfjsLib.GlobalWorkerOptions.workerSrc=PDFW}
+    const pdf=await pdfjsLib.getDocument({data:await pdfBytes(url)}).promise;box.innerHTML='';
+    const cssW=Math.max(box.clientWidth*1.6,520),dpr=window.devicePixelRatio||1;
+    for(let n=1;n<=pdf.numPages;n++){const pg=await pdf.getPage(n),v0=pg.getViewport({scale:1}),v=pg.getViewport({scale:cssW*dpr/v0.width});
+      const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.style.width=cssW+'px';c.style.height=(v.height/dpr)+'px';
+      box.appendChild(c);await pg.render({canvasContext:c.getContext('2d'),viewport:v}).promise}
+  }catch(e){box.innerHTML=`<p>Couldn’t show the schedule here (${esc(e.message)}). <a href="${esc(url)}" target="_blank" rel="noopener">Open the PDF</a></p>`}}
+function togglePdf(a){const card=a.closest('.card');let box=card.querySelector('.pdfbox');
+  if(box){box.remove();a.textContent='View schedule';return}
+  box=document.createElement('div');box.className='pdfbox';card.querySelector('.mu').after(box);a.textContent='Hide schedule';showPdf(a.dataset.pdf,box)}
 function nextMatch(L){const p=DB.pages.find(x=>x.url===L.url),t=p?.tabs.find(t=>schedCols(t.headers));if(!t)return'';
   const c=schedCols(t.headers),td=new Date();td.setHours(0,0,0,0);
   for(const r of t.rows){const d=parseD(r[c.d]);if(!d||d<td)continue;const hm=L.teams.find(x=>same(r[c.h],x)),aw=L.teams.find(x=>same(r[c.a],x));
     if(hm||aw)return`<div>Next match: <b>${esc(r[c.d])}</b> vs ${esc(hm?r[c.a]:r[c.h])} (${hm?'home':'away'})</div>`}return''}
+function combinedCard(Ls){
+  const A={MPR:{s:0,g:0},PPD:{s:0,g:0}},rows=Ls.map(L=>{const o={t:L.title,MPR:{s:0,g:0},PPD:{s:0,g:0}};
+    L.playerTables.filter(t=>t.scope==='overall').forEach(t=>{const r=t.rows[0];
+      for(const k of['MPR','PPD'])if(k in r&&'Gam' in r){const v=parseFloat(r[k]),g=parseInt(r.Gam,10);
+        if(isFinite(v)&&g>0){o[k].s+=v*g;o[k].g+=g;A[k].s+=v*g;A[k].g+=g}}});return o});
+  const f=(a,d)=>a.g?(a.s/a.g).toFixed(d):'–';
+  if(!A.MPR.g&&!A.PPD.g)return'';
+  return`<div class="card"><h2>All leagues combined</h2><div class="stats">`+(A.MPR.g?stat(f(A.MPR,2),`Cricket MPR · ${A.MPR.g} games`):'')+(A.PPD.g?stat(f(A.PPD,2),`X01 PPD · ${A.PPD.g} games`):'')+`</div>
+  <div class="tw"><table><tr><th>League</th><th>MPR</th><th>Games</th><th>PPD</th><th>Games</th></tr>${rows.map(o=>`<tr><td>${esc(o.t)}</td><td>${f(o.MPR,2)}</td><td>${o.MPR.g||''}</td><td>${f(o.PPD,2)}</td><td>${o.PPD.g||''}</td></tr>`).join('')}</table></div>
+  <p class="mu">Weighted by games played in each league. The leagues don’t publish darts thrown, so this is an approximation.</p></div>`}
 function league(L){
   const ov=L.playerTables.filter(t=>t.scope==='overall').map(t=>t.rows[0]),f=k=>ov.find(r=>k in r)?.[k];
   const st=L.teamTables.find(t=>/standing/i.test(t.heading))?.rows[0],lm=L.teamTables.find(t=>/last match/i.test(t.heading))?.rows[0];
-  let h=`<div class="card"><h2>${esc(L.title)}</h2><div class="mu">${L.teams.map(t=>tlink(L.url,t)).join(', ')} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a>${pdfOf(L.url)?' · '+pdfLink(L.url):''}</div><div class="stats">`
+  let h=`<div class="card"><h2>${esc(L.title)}</h2><div class="mu">${L.teams.map(t=>tlink(L.url,t)).join(', ')} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a> · <a href="#" data-l="${esc(L.url)}">Full league stats</a>${pdfOf(L.url)?' · '+pdfLink(L.url):''}</div><div class="stats">`
    +stat(f('MPR'),'Cricket MPR')+stat(f('PPD'),'X01 PPD')+(st?stat(`${st.Wins}-${st.Losses}`,`Team (${st['Win %']}%)`):'')+'</div>';
-  if(lm)h+=`<div>Last match: <b>${esc(lm.Date)}</b> vs ${esc(lm.Against)} · ${esc(lm.Wins)}-${esc(lm.Losses)} <span class="badge ${lm._inWindow?'in':''}">${lm._inWindow?'last week':'outside last week'}</span></div>`;
+  if(lm)h+=`<div>Last match: <b>${esc(lm.Date)}</b> vs ${esc(lm.Against)} · ${esc(lm.Wins)}-${esc(lm.Losses)}</div>`;
   h+=nextMatch(L);
-  if(!L.playerTables.some(t=>t.scope==='weekly'))h+='<p class="mu">No row in the published weekly tables (that does not mean no play).</p>';
   h+='<p class="mu">Tap a team to see its full roster, standings and schedule.</p><details><summary>All tables</summary>';
   L.teamTables.forEach(t=>h+=`<h3>${esc(t.heading)}</h3>`+tbl(t.headers,t.rows,L.url));
   L.playerTables.forEach(t=>h+=`<h3>${esc(t.heading)} <span class="mu">(${t.scope==='weekly'?'published weekly, week not dated':'season to date'})</span></h3>`+tbl(t.headers,t.rows,L.url));
@@ -116,7 +141,7 @@ function teamView(u,T){
     else rows=pl?t.rows.filter(isT):/standing/i.test(t.heading)?t.rows:t.rows.filter(r=>Object.values(r).some(eq));
     if(rows.length)secs.push({t,rows,pl,hd,sc:!!c||/schedul/i.test(t.heading)})});
   secs.sort((a,b)=>(a.pl-b.pl)||(b.sc-a.sc));
-  let h=`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>${esc(T)}</h2><div class="mu">${esc(p.title)} · <a href="${esc(u)}" target="_blank" rel="noopener">league page</a>${pdfOf(u)?' · '+pdfLink(u):''}</div>`;
+  let h=`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>${esc(T)}</h2><div class="mu">${esc(p.title)} · <a href="${esc(u)}" target="_blank" rel="noopener">league page</a> · <a href="#" data-l="${esc(u)}">Full league stats</a>${pdfOf(u)?' · '+pdfLink(u):''}</div>`;
   const full=p.tabs.find(t=>schedCols(t.headers));
   if(!secs.some(s=>s.sc))h+=`<p class="mu">${full?'No schedule rows matched this team’s name (the schedule may spell it differently). See the full schedule below.':pdfOf(u)?'This league publishes its schedule as a PDF: '+pdfLink(u)+'.':'No schedule table was found on this league’s page.'}</p>`;
   secs.forEach(s=>h+=`<h3>${esc(s.t.heading||'Table')}${s.pl?' <span class="mu">(team roster)</span>':''}</h3>`+tbl(s.hd,s.rows,u,/standing/i.test(s.t.heading)?isT:r=>r._next));
@@ -124,22 +149,47 @@ function teamView(u,T){
   h+=`<details><summary>Tables on this league’s page</summary><p class="mu">${p.tabs.map(t=>esc(t.heading||'(untitled)')).join('<br>')}</p></details>`;
   return h+'</div>'}
 function status(){if(!data)return;const g=new Date(data.generated).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-  $('st').innerHTML=`Scanned ${data.scanned} leagues · last full week ${fmtD(data.window[0])}–${fmtD(data.window[1])} · stats updated ${g}${data.offline?' (offline copy)':''} · <a href="#" id="rf">Refresh</a>`}
+  $('st').innerHTML=`Scanned ${data.scanned} leagues · stats updated ${g}${data.offline?' (offline copy)':''} · <a href="#" id="rf">Refresh</a>`}
+function leaguesView(){const ps=[...DB.pages].sort((a,b)=>(a.title||a.url).localeCompare(b.title||b.url,undefined,{numeric:true}));
+  return`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>All leagues</h2><p class="mu">Tap a league for its full stats.</p>${ps.map(p=>`<div style="padding:4px 0"><a href="#" data-l="${esc(p.url)}">${esc(p.title||p.url)}</a></div>`).join('')}</div>`}
+function leagueView(u,i){
+  const p=DB.pages.find(x=>x.url===u);if(!p)return'<p class="wn">League data not found.</p>';
+  const secs=p.tabs.filter(t=>t.rows.length),k=Math.min(i||0,secs.length-1),t=secs[k];
+  let h=`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>${esc(p.title||'League')}</h2><div class="mu"><a href="${esc(u)}" target="_blank" rel="noopener">league page</a>${pdfOf(u)?' · '+pdfLink(u):''}</div>`;
+  if(!t)return h+'<p class="mu">No tables found for this league.</p></div>';
+  h+=`<div class="chips">${secs.map((s,j)=>`<button type="button" class="chip ${j===k?'on':''}" data-sec="${j}">${esc((s.heading||'Table '+(j+1)).replace(/:$/,''))}</button>`).join('')}</div>`;
+  h+=`<input id="lf" placeholder="Filter this table (name, team…)" autocomplete="off" style="width:100%;margin:6px 0"><p class="mu" id="rc">${t.rows.length} rows · tap a column header to sort</p>`+tbl(t.headers,t.rows,u,null)+'</div>';return h}
 function render(){
   window.scrollTo(0,0);
+  if(view?.ls){$('chips').innerHTML='';$('out').innerHTML=leaguesView();return status()}
+  if(view?.l){$('chips').innerHTML='';$('out').innerHTML=leagueView(view.l,view.i);return status()}
   if(view){$('chips').innerHTML='';$('out').innerHTML=teamView(view.u,view.t);return status()}
+  if(!data){$('chips').innerHTML='';$('out').innerHTML='';return}
   const names=Object.keys(data.players);
   $('chips').innerHTML=names.length>1?names.map(n=>`<button type="button" class="chip ${n===cur?'on':''}" data-n="${esc(n)}">${esc(n)} (${data.players[n].length})</button>`).join(''):'';
-  $('out').innerHTML=cur?data.players[cur].map(league).join(''):'<p>No matching players found.</p>';status()}
+  $('out').innerHTML=cur?(data.players[cur].length>1?combinedCard(data.players[cur]):'')+data.players[cur].map(league).join(''):'<p>No matching players found.</p>';status()}
 $('chips').onclick=e=>{const n=e.target.dataset?.n;if(n){cur=n;render()}};
-$('out').onclick=e=>{const a=e.target.closest('a[data-t],a[data-p],#back');if(!a)return;e.preventDefault();
-  if(a.id==='back'){view=null;return render()}
-  if(a.dataset.t){view={u:a.dataset.u,t:a.dataset.t};return render()}
+$('out').onclick=e=>{const a=e.target.closest('a[data-t],a[data-p],a[data-pdf],a[data-l],button[data-sec],#back');if(!a)return;e.preventDefault();
+  if(a.dataset.pdf)return togglePdf(a);
+  if(a.id==='back'){view=stack.pop()||null;return render()}
+  if(a.dataset.sec!==undefined){view={...view,i:+a.dataset.sec};return render()}
+  if(a.dataset.l){stack.push(view);view={l:a.dataset.l,i:0};return render()}
+  if(a.dataset.t){stack.push(view);view={u:a.dataset.u,t:a.dataset.t};return render()}
   $('q').value=a.dataset.p;$('f').requestSubmit()};
 $('st').onclick=async e=>{if(e.target.id!=='rf')return;e.preventDefault();$('st').textContent='Refreshing…';
   try{await loadDB(true);const q=$('q').value.trim();if(q){data=await search(q);render()}else{data={...data,generated:DB.generated,offline:false};status()}}catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
-$('f').onsubmit=async e=>{e.preventDefault();const q=$('q').value.trim();view=null;
+$('f').onsubmit=async e=>{e.preventDefault();const q=$('q').value.trim();view=null;stack=[];
   $('st').textContent='Loading…';$('out').innerHTML='';$('chips').innerHTML='';
   try{data=await search(q);cur=Object.keys(data.players).sort((a,b)=>data.players[b].length-data.players[a].length)[0]||null;render()}
   catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
+$('bl').onclick=async e=>{e.preventDefault();$('st').textContent='Loading…';
+  try{await loadDB();stack=[];view={ls:1};$('st').textContent='';render()}catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
+document.addEventListener('input',e=>{if(e.target.id!=='lf')return;const q=e.target.value.toLowerCase();let n=0;
+  document.querySelectorAll('#out table tr').forEach((tr,j)=>{if(!j)return;const m=!q||tr.textContent.toLowerCase().includes(q);tr.style.display=m?'':'none';if(m)n++});
+  $('rc').textContent=n+' rows · tap a column header to sort'});
+document.addEventListener('click',e=>{const th=e.target.closest('#out th');if(!th)return;
+  const tb=th.closest('table'),i=[...th.parentNode.children].indexOf(th),rows=[...tb.querySelectorAll('tr')].slice(1),dir=th.dataset.d==='a'?-1:1;th.dataset.d=dir===1?'a':'d';
+  const v=r=>(r.children[i]?.textContent||'').trim(),num=rows.every(r=>v(r)===''||!isNaN(parseFloat(v(r))));
+  rows.sort((a,b)=>num?(parseFloat(v(a))||0)-(parseFloat(v(b))||0):v(a).localeCompare(v(b)));if(dir<0)rows.reverse();
+  if(rows.length)rows.forEach(r=>r.parentNode.appendChild(r))});
 </script></body></html>
