@@ -20,6 +20,7 @@ details{margin-top:8px}summary{cursor:pointer;color:var(--ac);font-weight:600}
 .tw{overflow-x:auto}table{border-collapse:collapse;margin:6px 0;font-size:.85rem}td,th{border:1px solid var(--bd);padding:5px 8px;text-align:left;white-space:nowrap}th{background:var(--hd)}
 .pdfbox{overflow-x:auto;border:1px solid var(--bd);border-radius:8px;margin:8px 0;background:#fff;color:#202830;padding:4px}.pdfbox canvas{display:block;margin:0 0 6px}.pdfbox p{margin:8px;color:#202830}
 #out th{cursor:pointer}
+.potw{border-color:var(--ok)}.potw .pk{color:var(--ok);font-size:.8rem;font-weight:600}
 tr.hl td{background:var(--hd);font-weight:700}h3{font-size:.95rem;margin:14px 0 2px}
 #pal{display:none}#pal.open{display:block}#pal label{margin-right:12px;font-size:.9rem}#pal input[type=color]{width:44px;height:32px;padding:0;border:1px solid var(--bd);vertical-align:middle;background:none}
 </style></head><body><main>
@@ -118,10 +119,35 @@ function combinedCard(Ls){
   return`<div class="card"><h2>All leagues combined</h2><div class="stats">`+(A.MPR.g?stat(f(A.MPR,2),`Cricket MPR · ${A.MPR.g} games`):'')+(A.PPD.g?stat(f(A.PPD,2),`X01 PPD · ${A.PPD.g} games`):'')+`</div>
   <div class="tw"><table><tr><th>League</th><th>MPR</th><th>Games</th><th>PPD</th><th>Games</th></tr>${rows.map(o=>`<tr><td>${esc(o.t)}</td><td>${f(o.MPR,2)}</td><td>${o.MPR.g||''}</td><td>${f(o.PPD,2)}</td><td>${o.PPD.g||''}</td></tr>`).join('')}</table></div>
   <p class="mu">Weighted by games played in each league. The leagues don’t publish darts thrown, so this is an approximation.</p></div>`}
-function league(L){
+const potwCache=new WeakMap();
+const tcase=s=>s.replace(/\w\S*/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
+function potw(p){if(!p)return null;if(potwCache.has(p))return potwCache.get(p);let res=null;
+  const ws={};p.tabs.forEach(t=>{const m=/week\s+(\d+)/i.exec(t.heading||'');if(m&&!/improved/i.test(t.heading))(ws[+m[1]]??=[]).push(t)});
+  const wk=Math.max(...Object.keys(ws).map(Number));
+  if(isFinite(wk)){const pl={};
+    ws[wk].forEach(t=>{const x01=t.headers.includes('Wins'),wc=x01?'Wins':t.headers.includes('Win')?'Win':null,tc=t.headers.includes('Team')?'Team':'TeamName';
+      if(!wc||!t.headers.includes('Player'))return;
+      t.rows.forEach(r=>{const n=cl(r.Player);if(!n)return;const k=n.toLowerCase(),o=pl[k]??={k,name:tcase(n),team:r[tc]||'',cw:0,xw:0,out:0};
+        const w=parseInt(r[wc],10)||0;if(x01)o.xw+=w;else o.cw+=w;
+        if(x01&&'HstOut'in r)o.out=Math.max(o.out,parseFloat(r.HstOut)||0)})});
+    const L=Object.values(pl).map(o=>({...o,wins:o.cw+o.xw})).sort((a,b)=>b.wins-a.wins||b.out-a.out),top=L[0];
+    if(top&&top.wins)res={week:wk,win:L.filter(o=>o.wins===top.wins&&o.out===top.out),list:L}}
+  potwCache.set(p,res);return res}
+const isPotw=(url,name)=>{const w=potw(DB.pages.find(x=>x.url===url));return w&&w.win.some(o=>o.k===cl(name).toLowerCase())?w:null};
+function potwLine(p){const w=potw(p);if(!w)return'';const o=w.win[0];
+  return w.win.length>1?`Week ${w.week} · Co-winners (${w.win.length} tied on ${o.wins} wins)`:`Week ${w.week} · ${esc(o.name)} · ${o.wins} wins${o.out?', '+o.out+' out':''}`}
+function potwCard(p){const w=potw(p);if(!w)return'';const o=w.win[0],co=w.win.length>1;
+  let h=`<div class="card potw"><div class="pk">★ Player of the week · Week ${w.week}</div>`;
+  h+=w.win.map(x=>`<h2 style="margin:6px 0 0"><a href="#" data-p="${esc(x.name)}">${esc(x.name)}</a></h2><div class="mu">${esc(x.team)}</div>`).join('');
+  h+=`<div class="stats">`+stat(`${o.wins} wins`,co?'each':`${o.cw} Cricket · ${o.xw} X01`)+stat(o.out||'–','High out'+(co&&!o.out?' (none recorded)':''))+`</div>`;
+  const rest=w.list.filter(x=>!w.win.includes(x)).slice(0,3);
+  if(rest.length)h+=tbl(['Player','Team','Wins','High out'],rest.map(x=>({Player:x.name,Team:x.team,Wins:String(x.wins),'High out':x.out?String(x.out):''})),p.url,null);
+  return h+`<p class="mu">Wins are Cricket plus X01 for the week. Highest out breaks ties.</p></div>`}
+function league(L,name){
   const ov=L.playerTables.filter(t=>t.scope==='overall').map(t=>t.rows[0]),f=k=>ov.find(r=>k in r)?.[k];
   const st=L.teamTables.find(t=>/standing/i.test(t.heading))?.rows[0],lm=L.teamTables.find(t=>/last match/i.test(t.heading))?.rows[0];
-  let h=`<div class="card"><h2>${esc(L.title)}</h2><div class="mu">${L.teams.map(t=>tlink(L.url,t)).join(', ')} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a> · <a href="#" data-l="${esc(L.url)}">Full league stats</a>${pdfOf(L.url)?' · '+pdfLink(L.url):''}</div><div class="stats">`
+  const pw=name&&isPotw(L.url,name);
+  let h=`<div class="card"><h2>${esc(L.title)}</h2>${pw?`<div><span class="badge in">★ Player of the week · Week ${pw.week}</span></div>`:''}<div class="mu">${L.teams.map(t=>tlink(L.url,t)).join(', ')} · <a href="${esc(L.url)}" target="_blank" rel="noopener">league page</a> · <a href="#" data-l="${esc(L.url)}">Full league stats</a>${pdfOf(L.url)?' · '+pdfLink(L.url):''}</div><div class="stats">`
    +stat(f('MPR'),'Cricket MPR')+stat(f('PPD'),'X01 PPD')+(st?stat(`${st.Wins}-${st.Losses}`,`Team (${st['Win %']}%)`):'')+'</div>';
   if(lm)h+=`<div>Last match: <b>${esc(lm.Date)}</b> vs ${esc(lm.Against)} · ${esc(lm.Wins)}-${esc(lm.Losses)}</div>`;
   h+=nextMatch(L);
@@ -151,12 +177,13 @@ function teamView(u,T){
 function status(){if(!data)return;const g=new Date(data.generated).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   $('st').innerHTML=`Scanned ${data.scanned} leagues · stats updated ${g}${data.offline?' (offline copy)':''} · <a href="#" id="rf">Refresh</a>`}
 function leaguesView(){const ps=[...DB.pages].sort((a,b)=>(a.title||a.url).localeCompare(b.title||b.url,undefined,{numeric:true}));
-  return`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>All leagues</h2><p class="mu">Tap a league for its full stats.</p>${ps.map(p=>`<div style="padding:4px 0"><a href="#" data-l="${esc(p.url)}">${esc(p.title||p.url)}</a></div>`).join('')}</div>`}
+  return`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>All leagues</h2><p class="mu">Tap a league for its full stats.</p>${ps.map(p=>`<div style="padding:4px 0"><a href="#" data-l="${esc(p.url)}">${esc(p.title||p.url)}</a><div class="mu">${potw(p)?'★ '+potwLine(p):'No weekly results published'}</div></div>`).join('')}</div>`}
 function leagueView(u,i){
   const p=DB.pages.find(x=>x.url===u);if(!p)return'<p class="wn">League data not found.</p>';
   const secs=p.tabs.filter(t=>t.rows.length),k=Math.min(i||0,secs.length-1),t=secs[k];
   let h=`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>${esc(p.title||'League')}</h2><div class="mu"><a href="${esc(u)}" target="_blank" rel="noopener">league page</a>${pdfOf(u)?' · '+pdfLink(u):''}</div>`;
   if(!t)return h+'<p class="mu">No tables found for this league.</p></div>';
+  h+=potwCard(p);
   h+=`<div class="chips">${secs.map((s,j)=>`<button type="button" class="chip ${j===k?'on':''}" data-sec="${j}">${esc((s.heading||'Table '+(j+1)).replace(/:$/,''))}</button>`).join('')}</div>`;
   h+=`<input id="lf" placeholder="Filter this table (name, team…)" autocomplete="off" style="width:100%;margin:6px 0"><p class="mu" id="rc">${t.rows.length} rows · tap a column header to sort</p>`+tbl(t.headers,t.rows,u,null)+'</div>';return h}
 function render(){
@@ -167,7 +194,7 @@ function render(){
   if(!data){$('chips').innerHTML='';$('out').innerHTML='';return}
   const names=Object.keys(data.players);
   $('chips').innerHTML=names.length>1?names.map(n=>`<button type="button" class="chip ${n===cur?'on':''}" data-n="${esc(n)}">${esc(n)} (${data.players[n].length})</button>`).join(''):'';
-  $('out').innerHTML=cur?(data.players[cur].length>1?combinedCard(data.players[cur]):'')+data.players[cur].map(league).join(''):'<p>No matching players found.</p>';status()}
+  $('out').innerHTML=cur?(data.players[cur].length>1?combinedCard(data.players[cur]):'')+data.players[cur].map(L=>league(L,cur)).join(''):'<p>No matching players found.</p>';status()}
 $('chips').onclick=e=>{const n=e.target.dataset?.n;if(n){cur=n;render()}};
 $('out').onclick=e=>{const a=e.target.closest('a[data-t],a[data-p],a[data-pdf],a[data-l],button[data-sec],#back');if(!a)return;e.preventDefault();
   if(a.dataset.pdf)return togglePdf(a);
