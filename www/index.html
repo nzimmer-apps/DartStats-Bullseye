@@ -29,7 +29,7 @@ tr.hl td{background:var(--hd);font-weight:700}h3{font-size:.95rem;margin:14px 0 
 <label>Background <input type="color" id="cb"></label><label>Text <input type="color" id="ct"></label>
 <button class="chip" id="rs" type="button">Reset</button></div>
 <form id="f"><input id="q" placeholder="Player name (e.g. Nick Zimmer)" autocomplete="off" autocapitalize="words" required minlength="2"><button>Search</button></form>
-<p class="mu"><a href="#" id="bl">Browse all leagues</a></p><p class="mu" id="st"></p><div class="chips" id="chips"></div><div id="out"></div>
+<p class="mu"><a href="#" id="bl">Browse all leagues</a> · <a href="#" id="lbl">Leaderboard</a></p><p class="mu" id="st"></p><div class="chips" id="chips"></div><div id="out"></div>
 </main><script>
 const DATA_URL='https://raw.githubusercontent.com/nzimmer-apps/DartStats-Bullseye/main/data.json',TTL=864e5;
 const TEAMK=['Team','TeamName','Against','Opponent','Home','Away'],PRE={Light:['#f5f7fa','#202830'],Dark:['#0f1720','#e6edf3'],Midnight:['#000000','#9fd3ff'],Sepia:['#f4ecd8','#4a3b28'],'High contrast':['#000000','#ffff00']};
@@ -176,6 +176,29 @@ function teamView(u,T){
   return h+'</div>'}
 function status(){if(!data)return;const g=new Date(data.generated).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   $('st').innerHTML=`Scanned ${data.scanned} leagues · stats updated ${g}${data.offline?' (offline copy)':''} · <a href="#" id="rf">Refresh</a>`}
+const lbCache=new WeakMap();
+function lbData(){if(lbCache.has(DB))return lbCache.get(DB);
+  const out={MPR:{},PPD:{}},seen=new Set();
+  DB.pages.forEach(p=>p.tabs.forEach(t=>{
+    if(/week\s+\d+|improved/i.test(t.heading||'')||!t.headers.includes('Player')||!t.headers.includes('Gam'))return;
+    ['MPR','PPD'].forEach(k=>{if(!t.headers.includes(k))return;
+      t.rows.forEach(r=>{const n=cl(r.Player).toLowerCase(),v=parseFloat(r[k]),g=parseFloat(r.Gam);
+        if(!n||!isFinite(v)||!(g>0))return;const key=p.url+'|'+k+'|'+n;if(seen.has(key))return;seen.add(key);
+        const a=out[k][n]??={name:tcase(cl(r.Player)),s:0,g:0,l:new Set()};a.s+=v*g;a.g+=g;a.l.add(p.url)})})}));
+  const res={};for(const k of['MPR','PPD'])res[k]=Object.values(out[k]).map(a=>({name:a.name,v:a.s/a.g,g:a.g,l:a.l.size}));
+  lbCache.set(DB,res);return res}
+function lbRows(){const all=lbData()[view.st].filter(x=>x.g>=view.min).sort((a,b)=>b.v-a.v||b.g-a.g);
+  all.forEach((x,i)=>x.rank=i+1);const f=view.f.toLowerCase();return{all:all.length,rows:f?all.filter(x=>x.name.toLowerCase().includes(f)):all}}
+function leaderboardView(){
+  return`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>Leaderboard</h2><p class="mu">Every player across all leagues. Averages are weighted by games played, and players in more than one league are combined.</p>
+  <div class="chips">${[['MPR','Cricket MPR'],['PPD','X01 PPD']].map(([k,l])=>`<button type="button" class="chip ${view.st===k?'on':''}" data-lb="st:${k}">${l}</button>`).join('')}</div>
+  <div class="chips"><span class="mu" style="align-self:center">Min games</span>${[10,20,30,50].map(n=>`<button type="button" class="chip ${view.min===n?'on':''}" data-lb="min:${n}">${n}</button>`).join('')}</div>
+  <input id="lbf" placeholder="Find a player" value="${esc(view.f)}" autocomplete="off" style="width:100%;margin:6px 0"><div id="lbt"></div>
+  <p class="mu">Raw averages: handicapped leagues are not adjusted, so compare with care.</p></div>`}
+function drawLb(){const{all,rows}=lbRows(),lab=view.st==='MPR'?'MPR':'PPD',shown=rows.slice(0,view.n);
+  $('lbt').innerHTML=`<p class="mu">${view.f?rows.length+' matching · ':''}${all} players with ${view.min}+ games</p>`
+    +(shown.length?tbl(['#','Player',lab,'Games','Leagues'],shown.map(x=>({'#':String(x.rank),Player:x.name,[lab]:x.v.toFixed(2),Games:String(x.g),Leagues:String(x.l)})),'',null):'<p class="mu">No players match.</p>')
+    +(rows.length>shown.length?`<p><button type="button" class="chip" data-lb="more">Show more</button></p>`:'')}
 function leaguesView(){const ps=[...DB.pages].sort((a,b)=>(a.title||a.url).localeCompare(b.title||b.url,undefined,{numeric:true}));
   return`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>All leagues</h2><p class="mu">Tap a league for its full stats.</p>${ps.map(p=>`<div style="padding:4px 0"><a href="#" data-l="${esc(p.url)}">${esc(p.title||p.url)}</a><div class="mu">${potw(p)?'★ '+potwLine(p):'No weekly results published'}</div></div>`).join('')}</div>`}
 function leagueView(u,i){
@@ -188,6 +211,7 @@ function leagueView(u,i){
   h+=`<input id="lf" placeholder="Filter this table (name, team…)" autocomplete="off" style="width:100%;margin:6px 0"><p class="mu" id="rc">${t.rows.length} rows · tap a column header to sort</p>`+tbl(t.headers,t.rows,u,null)+'</div>';return h}
 function render(){
   window.scrollTo(0,0);
+  if(view?.lb){$('chips').innerHTML='';$('out').innerHTML=leaderboardView();drawLb();return status()}
   if(view?.ls){$('chips').innerHTML='';$('out').innerHTML=leaguesView();return status()}
   if(view?.l){$('chips').innerHTML='';$('out').innerHTML=leagueView(view.l,view.i);return status()}
   if(view){$('chips').innerHTML='';$('out').innerHTML=teamView(view.u,view.t);return status()}
@@ -196,9 +220,12 @@ function render(){
   $('chips').innerHTML=names.length>1?names.map(n=>`<button type="button" class="chip ${n===cur?'on':''}" data-n="${esc(n)}">${esc(n)} (${data.players[n].length})</button>`).join(''):'';
   $('out').innerHTML=cur?(data.players[cur].length>1?combinedCard(data.players[cur]):'')+data.players[cur].map(L=>league(L,cur)).join(''):'<p>No matching players found.</p>';status()}
 $('chips').onclick=e=>{const n=e.target.dataset?.n;if(n){cur=n;render()}};
-$('out').onclick=e=>{const a=e.target.closest('a[data-t],a[data-p],a[data-pdf],a[data-l],button[data-sec],#back');if(!a)return;e.preventDefault();
+$('out').onclick=e=>{const a=e.target.closest('a[data-t],a[data-p],a[data-pdf],a[data-l],button[data-sec],button[data-lb],#back');if(!a)return;e.preventDefault();
   if(a.dataset.pdf)return togglePdf(a);
   if(a.id==='back'){view=stack.pop()||null;return render()}
+  if(a.dataset.lb){const[k,v]=a.dataset.lb.split(':');
+    if(k==='more'){view.n+=50;return drawLb()}
+    if(k==='st')view.st=v;else view.min=+v;view.n=50;return render()}
   if(a.dataset.sec!==undefined){view={...view,i:+a.dataset.sec};return render()}
   if(a.dataset.l){stack.push(view);view={l:a.dataset.l,i:0};return render()}
   if(a.dataset.t){stack.push(view);view={u:a.dataset.u,t:a.dataset.t};return render()}
@@ -209,6 +236,9 @@ $('f').onsubmit=async e=>{e.preventDefault();const q=$('q').value.trim();view=nu
   $('st').textContent='Loading…';$('out').innerHTML='';$('chips').innerHTML='';
   try{data=await search(q);cur=Object.keys(data.players).sort((a,b)=>data.players[b].length-data.players[a].length)[0]||null;render()}
   catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
+$('lbl').onclick=async e=>{e.preventDefault();$('st').textContent='Loading…';
+  try{await loadDB();stack=[];view={lb:1,st:'MPR',min:20,f:'',n:50};$('st').textContent='';render()}catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
+document.addEventListener('input',e=>{if(e.target.id!=='lbf')return;view.f=e.target.value;view.n=50;drawLb()});
 $('bl').onclick=async e=>{e.preventDefault();$('st').textContent='Loading…';
   try{await loadDB();stack=[];view={ls:1};$('st').textContent='';render()}catch(err){$('st').innerHTML=`<span class="wn">${esc(err.message)}</span>`}};
 document.addEventListener('input',e=>{if(e.target.id!=='lf')return;const q=e.target.value.toLowerCase();let n=0;

@@ -18,6 +18,10 @@ The app is a single HTML page wrapped as an Android APK with Capacitor. A schedu
 - **Browse all leagues** lists every league. Each league page has a button per table (standings, Cricket, X01, and so on), a filter box, and sortable columns.
 - Tap any player name, anywhere, to search for that player.
 
+**Leaderboard**
+- Ranks every player across all leagues by Cricket MPR or X01 PPD, weighted by games played, with a minimum-games filter (10, 20, 30, 50) and a name filter.
+- Raw averages: handicap leagues are not adjusted.
+
 **Player of the week**
 - Shown on the league page, as a one-line preview in the league list, and as a badge on a player's league card.
 - Rule: most wins in the latest week (Cricket wins plus X01 wins). The highest X01 out breaks ties. Ties that remain are shown as co-winners.
@@ -119,7 +123,6 @@ Every table on a league page becomes a tab. Player tables are recognized by a `P
 - Team vs team comparison screen
 - Favorites and a "remember me" home screen
 - Trends over time and week-over-week changes, using saved snapshots
-- Cross-league leaderboards with a minimum-games filter
 - Rank and percentile within each league
 
 ## Tech
