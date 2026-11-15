@@ -192,7 +192,7 @@ function lbRows(){const all=lbData()[view.st].filter(x=>x.g>=view.min).sort((a,b
 function leaderboardView(){
   return`<button class="chip" id="back" type="button">← Back</button><div class="card"><h2>Leaderboard</h2><p class="mu">Every player across all leagues. Averages are weighted by games played, and players in more than one league are combined.</p>
   <div class="chips">${[['MPR','Cricket MPR'],['PPD','X01 PPD']].map(([k,l])=>`<button type="button" class="chip ${view.st===k?'on':''}" data-lb="st:${k}">${l}</button>`).join('')}</div>
-  <div class="chips"><span class="mu" style="align-self:center">Min games</span>${[10,20,30,50].map(n=>`<button type="button" class="chip ${view.min===n?'on':''}" data-lb="min:${n}">${n}</button>`).join('')}</div>
+  <div class="chips"><span class="mu" style="align-self:center">Min games</span>${[5,10,20,30,50,100].map(n=>`<button type="button" class="chip ${view.min===n?'on':''}" data-lb="min:${n}">${n}</button>`).join('')}</div>
   <input id="lbf" placeholder="Find a player" value="${esc(view.f)}" autocomplete="off" style="width:100%;margin:6px 0"><div id="lbt"></div>
   <p class="mu">Raw averages: handicapped leagues are not adjusted, so compare with care.</p></div>`}
 function drawLb(){const{all,rows}=lbRows(),lab=view.st==='MPR'?'MPR':'PPD',shown=rows.slice(0,view.n);

@@ -19,7 +19,7 @@ The app is a single HTML page wrapped as an Android APK with Capacitor. A schedu
 - Tap any player name, anywhere, to search for that player.
 
 **Leaderboard**
-- Ranks every player across all leagues by Cricket MPR or X01 PPD, weighted by games played, with a minimum-games filter (10, 20, 30, 50) and a name filter.
+- Ranks every player across all leagues by Cricket MPR or X01 PPD, weighted by games played, with a minimum-games filter (5, 10, 20, 30, 50, 100) and a name filter.
 - Raw averages: handicap leagues are not adjusted.
 
 **Player of the week**
